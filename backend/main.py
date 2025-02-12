@@ -38,16 +38,6 @@ llm = ChatOllama(
 )
 
 
-def should_continue(state: MessagesState):
-    """Return the next node to execute."""
-    last_message = state["messages"][-1]
-    # If there is no function call, then we finish
-    if not last_message.tool_calls:
-        return END
-    # Otherwise if there is, we continue
-    return "action"
-
-
 def call_model(state: MessagesState, config: RunnableConfig) -> MessagesState:
     # Make sure that config is populated with the session id
     print(f"Config: {config}")
@@ -83,12 +73,6 @@ def get_chat_history(session_id: str) -> InMemoryChatMessageHistory:
         chat_history = InMemoryChatMessageHistory()
         chats_by_session_id[session_id] = chat_history
     return chat_history
-
-# # Define the function that calls the model
-# def call_model(state: MessagesState):
-#     response = model.invoke(state["messages"])
-#     # We return a list, because this will get added to the existing list
-#     return {"messages": response}
 
 
 def initialize_state_graph():
@@ -130,14 +114,12 @@ def proxy_ollama():
             ("human", prompt),
         ]
     )
-    # ai_msg = llm.invoke(messages)
 
-    graph = initialize_state_graph()
+    call_model_graph = initialize_state_graph()
 
     # Stream the messages through the graph
-    for event in graph.stream(messages, config, stream_mode="values"):
+    for event in call_model_graph.stream(messages, config, stream_mode="values"):
         print(f"Stream Event: {event}")
-        # print(f"event: {event}")
 
         latest_message = event["messages"][-1]
 
@@ -148,22 +130,6 @@ def proxy_ollama():
             # console.print(Markdown(latest_message.content))
 
     return jsonify(latest_message.content)
-
-    # try:
-    #     # Send request to Ollama
-    #     ollama_response = requests.post(
-    #         OLLAMA_API_URL,
-    #         json={
-    #             'prompt': prompt,
-    #             'model': model,
-    #             'stream': False  # Adding this to ensure we get a complete response
-    #         }
-    #     )
-    #     ollama_response.raise_for_status()  # Raise an error for bad responses
-    #     return jsonify(ollama_response.json())
-    # except requests.exceptions.RequestException as e:
-    #     print(f"Error: {e}")
-    #     return jsonify({"error": "Ollama API error"}), 500
 
 
 if __name__ == '__main__':
