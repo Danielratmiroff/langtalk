@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import List, TypedDict
-from flask import Flask, request, jsonify
+from flask import Flask, Response, request, jsonify, stream_with_context
 from langchain_ollama import ChatOllama
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
@@ -26,7 +26,7 @@ OLLAMA_API_URL = 'http://localhost:11434/api/generate'
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-    response.headers.add('Access-Control-Allow-Methods', 'POST')
+    response.headers.add('Access-Control-Allow-Methods', 'GET')
     return response
 
 
@@ -35,12 +35,13 @@ model = "deepseek-r1:1.5b"
 llm = ChatOllama(
     model=model,
     temperature=0,
+    stream=True,
 )
 
 
 def call_model(state: MessagesState, config: RunnableConfig) -> MessagesState:
     # Make sure that config is populated with the session id
-    print(f"Config: {config}")
+    # print(f"Config: {config}")
     if "configurable" not in config or "session_id" not in config["configurable"]:
         raise ValueError(
             "Make sure that the config includes the following information: {'configurable': {'session_id': 'some_value'}}"
@@ -52,7 +53,8 @@ def call_model(state: MessagesState, config: RunnableConfig) -> MessagesState:
 
     messages = list(chat_history.messages) + state["messages"]
     response = llm.invoke(messages)
-    print(f"\nAI Response: {response}")
+    # print(f"\nAI Response: {response}")
+    print(f"log: {response}")
 
     main_response = response.content
 
@@ -89,47 +91,51 @@ def initialize_state_graph():
     return graph
 
 
-@app.route('/api/ollama', methods=['POST'])
+@app.route('/api/ollama', methods=['GET'])
 def proxy_ollama():
 
-    payload = request.json
-    prompt = payload.get('prompt')
+    prompt = request.args.get('prompt')
     if not prompt:
         return jsonify({'error': 'Prompt is required'}), 400
 
     session_id = "1234"
 
-    config = {
-        "configurable": {
-            "session_id": session_id,
+    def generate():
+        config = {
+            "configurable": {
+                "session_id": session_id,
+            }
         }
-    }
 
-    messages = MessagesState(
-        messages=[
-            (
-                "system",
-                "You are a helpful assistant that translates English to French. Translate the user sentence.",
-            ),
-            ("human", prompt),
-        ]
-    )
+        messages = MessagesState(
+            messages=[
+                (
+                    "system",
+                    "You are a helpful assistant that translates English to French. Translate the user sentence.",
+                ),
+                ("human", prompt),
+            ]
+        )
 
-    call_model_graph = initialize_state_graph()
+        call_model_graph = initialize_state_graph()
 
-    # Stream the messages through the graph
-    for event in call_model_graph.stream(messages, config, stream_mode="values"):
-        print(f"Stream Event: {event}")
+        for event in call_model_graph.stream(messages, config, stream_mode="messages"):
+            # print(f"chunk: {event}")
+            if isinstance(event, tuple) and isinstance(event[0], AIMessageChunk):
+                chunk = event[0].content
+                print(f"yow chunck: {chunk}")
+                yield f"data: {chunk}\n\n"
+            # return chunk
+            # print(f"chunk: {chunk}")
+            # yield f"data: {chunk}"
 
-        latest_message = event["messages"][-1]
+    # for event in call_model_graph.stream(messages, config, stream_mode="values"):
+    #     if event.get("messages") and isinstance(event["messages"][-1], AIMessage):
+    #         chunk = event["messages"][-1].content
+    #         yield f"data: {chunk}\n\n"
 
-        # Only process AI messages
-        if isinstance(latest_message, AIMessage):
-            # Display AI message content
-            print(latest_message.content)
-            # console.print(Markdown(latest_message.content))
-
-    return jsonify(latest_message.content)
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
+    # return jsonify(latest_message.content)
 
 
 if __name__ == '__main__':
