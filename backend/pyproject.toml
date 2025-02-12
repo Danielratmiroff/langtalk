@@ -12,6 +12,11 @@ flask = "^3.1.0"
 requests = "^2.32.3"
 langgraph = "^0.2.71"
 langchain = "^0.3.18"
+langchain-ollama = "^0.2.3"
+ollama = "^0.4.7"
+langchainhub = "^0.1.21"
+langchain-core = "^0.3.34"
+langchain-community = "^0.3.17"
 
 
 [build-system]
