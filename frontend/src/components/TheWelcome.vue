@@ -42,7 +42,7 @@ async function sendPrompt() {
     })
     
     const data = await res.json()
-    response.value = data.response
+    response.value = data
     prompt.value = '' // Clear input after successful response
   } catch (error) {
     console.error('Error:', error)
