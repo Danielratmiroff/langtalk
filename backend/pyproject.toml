@@ -1,5 +1,6 @@
 [tool.poetry]
 name = "langtalk"
+package-mode = false
 version = "0.1.0"
 description = "Speak in a new language"
 authors = ["Your Name <you@example.com>"]
@@ -8,7 +9,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-flask = {extras = ["async"], version = "^3.1.0"}
+flask = { extras = ["async"], version = "^3.1.0" }
 requests = "^2.32.3"
 langgraph = "^0.2.71"
 langchain = "^0.3.18"
@@ -17,7 +18,11 @@ ollama = "^0.4.7"
 langchainhub = "^0.1.21"
 langchain-core = "^0.3.34"
 langchain-community = "^0.3.17"
+langchain-google-genai = "^2.1.2"
 
+[tool.poetry.scripts]
+start = "langtalk.main:app.run"
+dev = "flask --app langtalk.main:app run --debug --port=3000"
 
 [build-system]
 requires = ["poetry-core"]
