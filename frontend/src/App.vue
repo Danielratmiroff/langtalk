@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue';
 
-const messages = ref<Array<{ id: number; text: string; sender: 'user' | 'ai' }>>([]);
+const messages = ref<Array<{ id: number; text: string; sender: 'user' | 'ai'; audioUrl?: string }>>([]);
 const currentMessage = ref('');
 const isLoading = ref(false);
 const chatContainer = ref<HTMLElement | null>(null);
@@ -13,6 +13,44 @@ const scrollToBottom = () => {
       chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
     }
   });
+};
+
+const textToSpeech = async (text: string): Promise<string | undefined> => {
+  try {
+    const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+    if (!apiKey || !text) {
+      console.error('Text-to-speech conversion failed:', 'No API key or text provided', 'apiKey:', apiKey);
+      return;
+    }
+
+    const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
+    const data = {
+      'input': {
+        'text': text
+      },
+      'voice': {
+        'languageCode': 'de-DE',
+        'name': 'de-DE-Standard-A',
+        'ssmlGender': 'FEMALE',
+      },
+      'audioConfig': {
+        'audioEncoding': 'MP3'
+      }
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+
+    const responseJson = await response.json();
+    const audioBlob = new Blob([Uint8Array.from(atob(responseJson.audioContent), c => c.charCodeAt(0))], { type: 'audio/mpeg' });
+    const audioUrl = URL.createObjectURL(audioBlob);
+    return audioUrl;
+  } catch (error) {
+    console.error('Text-to-speech conversion failed:', error);
+    return undefined;
+  }
 };
 
 const sendMessage = async () => {
@@ -33,15 +71,23 @@ const sendMessage = async () => {
   scrollToBottom();
 
   try {
-    const eventSource = new EventSource(`http://localhost:5000/api/gemini?prompt=${encodeURIComponent(userMessageToSend)}`);
+    const eventSource = new EventSource(`http://localhost:3000/api/gemini?prompt=${encodeURIComponent(userMessageToSend)}`);
 
     eventSource.onmessage = (event) => {
       if (event.data === "[DONE]") {
         eventSource.close();
         isLoading.value = false;
+
+        // Convert the complete AI response to speech
+        textToSpeech(messages.value[aiMessageIndex].text).then(audioUrl => {
+          if (audioUrl) {
+            messages.value[aiMessageIndex].audioUrl = audioUrl;
+          }
+        });
+
         return;
       }
-      
+
       // Append chunk to the AI message text
       messages.value[aiMessageIndex].text += event.data;
       scrollToBottom();
@@ -71,6 +117,9 @@ const sendMessage = async () => {
       <div ref="chatContainer" class="chat-history">
         <div v-for="message in messages" :key="message.id" :class="['message', message.sender]">
           <p>{{ message.text }}</p>
+          <div v-if="message.audioUrl" class="audio-controls">
+            <audio controls :src="message.audioUrl" class="audio-player"></audio>
+          </div>
         </div>
         <div v-if="isLoading" class="typing-indicator">
           <span></span>
@@ -79,15 +128,11 @@ const sendMessage = async () => {
         </div>
       </div>
       <div class="chat-input-area">
-        <input
-          type="text"
-          v-model="currentMessage"
-          placeholder="Type your message..."
-          :disabled="isLoading"
-          @keyup.enter="sendMessage"
-        />
+        <input type="text" v-model="currentMessage" placeholder="Type your message..." :disabled="isLoading"
+          @keyup.enter="sendMessage" />
         <button @click="sendMessage" :disabled="isLoading || !currentMessage.trim()">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="22" y1="2" x2="11" y2="13"></line>
             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
           </svg>
@@ -224,10 +269,14 @@ h1 {
 }
 
 @keyframes bounce {
-  0%, 80%, 100% { 
+
+  0%,
+  80%,
+  100% {
     transform: scale(0);
-  } 
-  40% { 
+  }
+
+  40% {
     transform: scale(1.0);
   }
 }
@@ -289,5 +338,21 @@ footer {
   color: #888;
   font-size: 0.8rem;
   border-top: 1px solid #eee;
+}
+
+.audio-controls {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.audio-player {
+  width: 100%;
+  height: 30px;
+  border-radius: 15px;
+}
+
+.message.user .audio-controls {
+  justify-content: flex-end;
 }
 </style>

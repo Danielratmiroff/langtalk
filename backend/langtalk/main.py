@@ -57,7 +57,7 @@ class GeminiClient:
 
     def __init__(
         self,
-        model: str = "gemini-pro",
+        model: str = "gemini-1.5-flash",
         temperature: float = 0.7,
         top_p: float = 0.95,
         top_k: int = 40,
@@ -253,11 +253,7 @@ def proxy_gemini():
 
     def generate():
         # Initialize Gemini client with streaming enabled
-        gemini_client = GeminiClient(
-            model="gemini-pro",
-            temperature=0.7,
-            stream=True
-        )
+        gemini_client = GeminiClient()
 
         config = {
             "configurable": {
@@ -270,7 +266,7 @@ def proxy_gemini():
             messages=[
                 (
                     "system",
-                    "You are a helpful chat assistant powered by Google's Gemini model.",
+                    "You are a helpful chat assistant and you respond in German.",
                 ),
                 ("human", prompt),
             ]
@@ -288,7 +284,3 @@ def proxy_gemini():
         yield f"data: [DONE]\n\n"
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
-
-
-if __name__ == '__main__':
-    app.run(port=3000)

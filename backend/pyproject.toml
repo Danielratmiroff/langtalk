@@ -22,7 +22,6 @@ langchain-google-genai = "^2.1.2"
 
 [tool.poetry.scripts]
 start = "langtalk.main:app.run"
-dev = "flask --app langtalk.main:app run --debug --port=3000"
 
 [build-system]
 requires = ["poetry-core"]
